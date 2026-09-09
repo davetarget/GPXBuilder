@@ -43,9 +43,22 @@ if "result_name" not in st.session_state:
     st.session_state.result_name = None
 if "summaries" not in st.session_state:
     st.session_state.summaries = None
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
+
 
 def log(message):
     st.session_state.log_lines.append(str(message))
+
+
+def reset_all():
+    """Remet l'écran à zéro : vide les résultats/journal et réinitialise
+    le sélecteur de fichiers (en changeant sa clé)."""
+    st.session_state.log_lines = []
+    st.session_state.result_bytes = None
+    st.session_state.result_name = None
+    st.session_state.summaries = None
+    st.session_state.uploader_key += 1
 
 
 # -----------------------------------------------------------------------
@@ -57,19 +70,17 @@ st.caption(
     "vers GPX compatible GSAK"
 )
 
-with st.expander("ℹ️ Aide rapide"):
-    st.text(core.HELP_TEXT)
-
 st.divider()
 
 # -----------------------------------------------------------------------
-# 1. Fichiers à traiter
+# Uploader des fichiers
 # -----------------------------------------------------------------------
-st.subheader("1. Fichiers à traiter")
+st.subheader("Uploader des fichiers")
 uploaded_files = st.file_uploader(
     "Ajoutez un ou plusieurs fichiers (.xlsx, .xlsm, .csv, .txt, .gpx)",
     type=["xlsx", "xlsm", "csv", "txt", "gpx"],
     accept_multiple_files=True,
+    key=f"uploader_{st.session_state.uploader_key}",
 )
 
 if uploaded_files:
@@ -104,37 +115,31 @@ else:
 st.divider()
 
 # -----------------------------------------------------------------------
-# 2. Nom du fichier de sortie
+# Traitement
 # -----------------------------------------------------------------------
-st.subheader("2. Fichier GPX généré")
-now = datetime.now()
-default_name = f"geocaches_{now.strftime('%d%m%y_%H%M%S')}.gpx"
-st.caption(f"Nom automatique proposé : `{default_name}`")
-custom_name = st.text_input(
-    "Vous pouvez modifier le nom du fichier de sortie si besoin",
-    value=default_name,
-)
-if not custom_name.lower().endswith(".gpx"):
-    custom_name += ".gpx"
+col1, col2 = st.columns([1, 1])
+with col1:
+    start = st.button(
+        "🚀 Démarrer",
+        type="primary",
+        disabled=not uploaded_files or mode not in ("process",),
+        use_container_width=True,
+    )
+with col2:
+    clear = st.button("🧹 Clear", use_container_width=True)
 
-st.divider()
-
-# -----------------------------------------------------------------------
-# 3. Traitement
-# -----------------------------------------------------------------------
-st.subheader("3. Traitement")
-
-start = st.button(
-    "🚀 Démarrer",
-    type="primary",
-    disabled=not uploaded_files or mode not in ("process",),
-)
+if clear:
+    reset_all()
+    st.rerun()
 
 if start:
     st.session_state.log_lines = []
     st.session_state.result_bytes = None
     st.session_state.result_name = None
     st.session_state.summaries = None
+
+    now = datetime.now()
+    out_name = f"geocaches_{now.strftime('%d%m%y_%H%M%S')}.gpx"
 
     tmp_dir = tempfile.mkdtemp(prefix="gpxbuilder_")
     try:
@@ -148,7 +153,7 @@ if start:
                 out.write(f.getbuffer())
             saved_paths.append(dest)
 
-        out_path = os.path.join(tmp_dir, custom_name)
+        out_path = os.path.join(tmp_dir, out_name)
 
         with st.spinner("Traitement en cours..."):
             log(f"Traitement de {len(saved_paths)} fichier(s)...")
@@ -181,7 +186,7 @@ if start:
 
             with open(out_path, "rb") as f:
                 st.session_state.result_bytes = f.read()
-            st.session_state.result_name = custom_name
+            st.session_state.result_name = out_name
             st.session_state.summaries = summaries
 
         if total_success == 0:
@@ -225,10 +230,3 @@ if st.session_state.log_lines:
         file_name="journal_gpxbuilder.txt",
         mime="text/plain",
     )
-
-st.divider()
-st.caption(
-    "Note : contrairement à la version bureau, cette version web ne mémorise pas "
-    "de dossier de destination — chaque traitement se termine par un téléchargement "
-    "direct du fichier GPX généré."
-)
