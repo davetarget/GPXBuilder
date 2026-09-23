@@ -109,8 +109,30 @@ if uploaded_files:
         else:
             mode_desc = "Mode mixte : les .gpx sont fusionnés tels quels, les autres sont convertis — le tout combiné dans un seul GPX."
         st.caption(f"Mode détecté automatiquement : {mode_desc}")
+
+    if ".gpx" in exts:
+        only_full_caches = st.checkbox(
+            "Ne garder que les vraies caches lors de la fusion des .gpx "
+            "(exclure les waypoints additionnels : stages, parkings, "
+            "coordonnées corrigées...)",
+            value=False,
+            help=(
+                "Un fichier .gpx exporté par GSAK peut contenir, en plus des "
+                "caches complètes, des waypoints additionnels rattachés à une "
+                "cache (stage virtuel, parking, coordonnée corrigée...) sans "
+                "les détails d'une cache (pas de description, pas d'indice...). "
+                "GSAK les reconnaît et les relie correctement à leur cache "
+                "parente, mais un autre logiciel qui ouvrirait le GPX fusionné "
+                "peut ne pas faire cette distinction et les afficher comme de "
+                "fausses caches vides. Cochez cette case pour les exclure du "
+                "fichier final et ne garder que les vraies caches."
+            ),
+        )
+    else:
+        only_full_caches = False
 else:
     mode = None
+    only_full_caches = False
 
 st.divider()
 
@@ -158,7 +180,7 @@ if start:
         with st.spinner("Traitement en cours..."):
             log(f"Traitement de {len(saved_paths)} fichier(s)...")
             summaries, total_success, total_rows = core.run_combined_processing(
-                saved_paths, out_path, log
+                saved_paths, out_path, log, only_full_caches=only_full_caches
             )
 
             log("-" * 60)
@@ -166,7 +188,8 @@ if start:
             for s in summaries:
                 if s["status"] == "OK":
                     if s["kind"] == "gpx":
-                        log(f"  - {s['file']} : OK ({s['count']} cache(s) fusionnée(s))")
+                        extra = f", {s['excluded']} exclu(s)" if s.get("excluded") else ""
+                        log(f"  - {s['file']} : OK ({s['count']} cache(s) fusionnée(s){extra})")
                     else:
                         log(
                             f"  - {s['file']} : OK ({s['success']}/{s['total']} cache(s), "
