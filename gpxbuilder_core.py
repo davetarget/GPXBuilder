@@ -778,10 +778,12 @@ def load_rows_and_header_map(path, log):
 GPX_NS = "http://www.topografix.com/GPX/1/0"
 GS_NS = "http://www.groundspeak.com/cache/1/0/1"
 XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
+GSAK_NS = "http://www.gsak.net/xmlv1/6"
 
 ET.register_namespace("", GPX_NS)
 ET.register_namespace("groundspeak", GS_NS)
 ET.register_namespace("xsi", XSI_NS)
+ET.register_namespace("gsak", GSAK_NS)
 
 
 def normalize_type(raw_type):
