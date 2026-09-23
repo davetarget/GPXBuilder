@@ -1080,12 +1080,39 @@ def _get_wpt_gc_code(wpt_elem):
     return None
 
 
-def run_combined_processing(file_paths, output_path, log, on_file_progress=None):
+def _wpt_is_full_cache(wpt_elem):
+    """Indique si un élément <wpt> est une VRAIE cache Geocaching (il porte
+    l'extension <groundspeak:cache> avec ses détails : nom, description,
+    indice, attributs...), par opposition à un simple waypoint additionnel
+    (stage virtuel, coordonnée corrigée, parking...) exporté par GSAK sous
+    forme de <wpt> "enfant" rattaché à une cache via gsak:wptExtension/Parent,
+    mais qui n'est pas lui-même une cache."""
+    for child in wpt_elem.iter():
+        localname = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+        if localname == "cache":
+            return True
+    return False
+
+
+def run_combined_processing(
+    file_paths, output_path, log, on_file_progress=None, only_full_caches=False
+):
     """
     Traite une liste de fichiers, chacun selon son propre type :
       - .gpx                    -> fusionné tel quel (aucun reformatage)
       - .csv / .xlsx / .txt     -> converti avec toute la logique habituelle
     Le tout est combiné dans un seul GPX de sortie.
+
+    `only_full_caches` (par défaut False, comportement historique inchangé) :
+    si True, pour les fichiers .gpx source, seuls les <wpt> qui sont de
+    VRAIES caches (avec l'extension <groundspeak:cache>) sont conservés.
+    Les waypoints additionnels sans cette extension (stages virtuels,
+    coordonnées corrigées, parkings... exportés par GSAK comme <wpt>
+    "enfants" d'une cache) sont exclus du GPX final, pour éviter qu'un
+    logiciel qui ne reconnaît pas l'extension GSAK gsak:wptExtension/Parent
+    ne les affiche comme de fausses caches sans détails. Un waypoint exclu
+    n'est retiré que du fichier final ; le fichier source n'est jamais
+    modifié, et le nombre exclu est indiqué dans le journal.
 
     Un fichier qui échoue (colonnes non reconnues, fichier corrompu/illisible,
     etc.) est sauté : le traitement continue avec les fichiers suivants, avec
@@ -1115,7 +1142,11 @@ def run_combined_processing(file_paths, output_path, log, on_file_progress=None)
             if ext == GPX_EXTENSION:
                 wpts = read_gpx_wpts(path)
                 count = 0
+                excluded = 0
                 for wpt in wpts:
+                    if only_full_caches and not _wpt_is_full_cache(wpt):
+                        excluded += 1
+                        continue
                     code = _get_wpt_gc_code(wpt)
                     if code:
                         if code in seen_codes:
@@ -1128,8 +1159,15 @@ def run_combined_processing(file_paths, output_path, log, on_file_progress=None)
                     gpx.append(wpt)
                     count += 1
 
+                if excluded:
+                    log(
+                        f"  {excluded} waypoint(s) additionnel(s) (stage/parking/correction, "
+                        f"sans détails de cache) exclu(s) du GPX final."
+                    )
                 log(f"{fname} : OK — {count} cache(s) fusionnée(s) (GPX existant, non modifié).")
-                summaries.append({"file": fname, "status": "OK", "kind": "gpx", "count": count})
+                summaries.append(
+                    {"file": fname, "status": "OK", "kind": "gpx", "count": count, "excluded": excluded}
+                )
                 total_success += count
                 total_rows += count
             else:
@@ -1179,5 +1217,3 @@ def classify_file_list(paths):
         return "noop", None
 
     return "process", None
-
-
